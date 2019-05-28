@@ -25,7 +25,7 @@ public class RpcClientTest {
         ResourceLeakDetector.setLevel(ResourceLeakDetector.Level.ADVANCED);
 
         RpcConsumer client = new RpcConsumer("localhost",8099)
-                .registerConsumer(SayHello.class);
+                .registerConsumer(SayHello.class).connect();
 
         // 服务调度
         for(int i = 0;i<100;i++){
