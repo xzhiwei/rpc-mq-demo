@@ -31,7 +31,6 @@ public class ProviderInvokeHandler extends ChannelInboundHandlerAdapter {
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
         super.channelInactive(ctx);
-
     }
 
     @Override
@@ -46,6 +45,7 @@ public class ProviderInvokeHandler extends ChannelInboundHandlerAdapter {
                 for(Method method:methods){
                     if(StringUtils.equalsIgnoreCase(method.getName(),methodBean.getMethodName())){
                         Object result = method.invoke(service,methodBean.getArgs());
+                        // 执行方法，之后通过netty发送执行结果
                         sendResult(ctx.channel(),nettyMessage.getHeader().getMessageId(),result);
                     }
                 }

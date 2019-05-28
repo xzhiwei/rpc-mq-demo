@@ -38,7 +38,7 @@ public class ClientMethodInvokeHandler extends ChannelInboundHandlerAdapter {
         super.userEventTriggered(ctx, evt);
         if(StringUtils.equalsIgnoreCase("AUTH_SUCCESS",evt.toString())){
             ClientMethodInvokeHandler.ctx = ctx;
-            System.out.println("fire rpc userEventTriggered");
+            logger.debug("fire rpc userEventTriggered");
             lock.lock();
             try {
                 condition.signalAll();
@@ -51,6 +51,7 @@ public class ClientMethodInvokeHandler extends ChannelInboundHandlerAdapter {
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
         NettyMessage nettyMessage = (NettyMessage) msg;
+        // 获取到rpc调用结果
         if(nettyMessage.getHeader().getType() == MessageType.RPC_RESULT){
             callback.callBack(nettyMessage.getHeader().getMessageId(),nettyMessage.getBody());
             ReferenceCountUtil.release(msg);

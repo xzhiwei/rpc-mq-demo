@@ -1,10 +1,14 @@
 package com.xzhiwei.demo.execute.rpc.invoke;
 
+import com.alibaba.fastjson.JSONObject;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import io.netty.channel.Channel;
 import com.xzhiwei.demo.base.message.MessageType;
 import com.xzhiwei.demo.base.message.NettyMessage;
+import com.xzhiwei.demo.execute.rpc.analyzer.SystemAnalyzer;
 import com.xzhiwei.demo.execute.rpc.handler.ClientMethodInvokeHandler;
+import io.netty.channel.Channel;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.concurrent.*;
 import java.util.concurrent.locks.Condition;
@@ -13,11 +17,13 @@ import java.util.concurrent.locks.ReentrantLock;
 
 public class ExecutorServiceImpl implements ExecutorService {
 
+    private static Logger logger = LoggerFactory.getLogger(ExecutorService.class);
+
     // 执行线程池，决定客户端的吞吐量
     private static final java.util.concurrent.ExecutorService executors = new ThreadPoolExecutor(5,5,30L,
             TimeUnit.SECONDS,
             new LinkedBlockingQueue<>(1024),
-            new ThreadFactoryBuilder().setNameFormat("rpc-executor-%d").build(),
+            new ThreadFactoryBuilder().setNameFormat("rpc-pool-%d").build(),
             new ThreadPoolExecutor.AbortPolicy());
 
 
@@ -29,7 +35,11 @@ public class ExecutorServiceImpl implements ExecutorService {
 
     @Override
     public Object execute(String className, String methodName, Object[] args) throws ExecutionException, InterruptedException, TimeoutException {
-        Future<Object> result = executors.submit(()->{
+        long start = System.currentTimeMillis();
+        if(logger.isDebugEnabled()) {
+            logger.debug("execute className: {}, methodName: {}, args: {}", className, methodName, JSONObject.toJSONString(args));
+        }
+        Future<Object> resultFuture = executors.submit(()->{
             // 生成新的condition，处理异步返回
             Condition condition = lock.newCondition();
             // 获取通道，此处优化，实现动态路由
@@ -45,11 +55,11 @@ public class ExecutorServiceImpl implements ExecutorService {
             callback.addCallBack(nettyMessage.getHeader().getMessageId(),lock,condition);
             // 发起rpc调用
             channel.writeAndFlush(nettyMessage);
-            // 当前线程锁定，等待返回结果
+            // 当前线程锁定，等待返回结果，此处异步操作会转化为同步操作
             try {
                 lock.lock();
                 try {
-                    // 等待执行
+                    // 等待执行，最多等待3秒
                     condition.await(3, TimeUnit.SECONDS);
                 } finally {
                     lock.unlock();
@@ -62,6 +72,12 @@ public class ExecutorServiceImpl implements ExecutorService {
                 callback.cleanCache(nettyMessage.getHeader().getMessageId());
             }
         });
-        return result.get(3,TimeUnit.SECONDS);
+        Object result =  resultFuture.get(3,TimeUnit.SECONDS);
+        long end = System.currentTimeMillis();
+        if(logger.isDebugEnabled()){
+            logger.debug("rpc cost [{}]ms",(System.currentTimeMillis() - start));
+        }
+        SystemAnalyzer.rpcTimeAnalyzer(className,methodName,end-start);
+        return result;
     }
 }
